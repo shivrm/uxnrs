@@ -51,9 +51,36 @@ impl Cpu {
 
     fn load_rom(&mut self, rom: &[u8]) {
         let start = 0x0100;
-        let end = 0x0100 + rom.len;
+        let end = 0x0100 + rom.len();
 
         self.mem[start..end].copy_from_slice(rom);
         self.pc = 0x0100;
     }
+}
+
+#[test]
+fn test_stack() {
+    let mut s = Stack::new();
+
+    // Test byte pushing and popping
+    s.push_byte(0x10);
+    s.push_byte(0x20);
+    assert_eq!(s.pop_byte(), 0x20);
+    assert_eq!(s.pop_byte(), 0x10);
+
+    // Test short pushing and popping
+    s.push_short(0x1234);
+    s.push_short(0x5678);
+    assert_eq!(s.pop_short(), 0x5678);
+    assert_eq!(s.pop_short(), 0x1234);
+
+    // Test conversion of shorts into bytes
+    s.push_short(0x1234);
+    assert_eq!(s.pop_byte(), 0x34);
+    assert_eq!(s.pop_byte(), 0x12);
+
+    // Test conversion of bytes into shorts
+    s.push_byte(0x56);
+    s.push_byte(0x78);
+    assert_eq!(s.pop_short(), 0x5678);
 }
