@@ -84,3 +84,18 @@ fn test_stack() {
     s.push_byte(0x78);
     assert_eq!(s.pop_short(), 0x5678);
 }
+
+#[test]
+fn test_load_rom() {
+    let mut cpu = Cpu::new();
+    let rom: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
+
+    // Verify that first four bytes are the ROM bytes
+    cpu.load_rom(&rom);
+    assert_eq!(cpu.mem[0x0100..0x0104], [0x12, 0x34, 0x56, 0x78]);
+
+    // Verify that the rest of the memory is zeroed
+    for byte in cpu.mem[0x0104..].iter() {
+        assert_eq!(*byte, 0_u8);
+    }
+}
