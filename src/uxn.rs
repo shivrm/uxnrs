@@ -24,6 +24,36 @@ impl Stack {
         let lower = self.data.pop().unwrap();
         let upper = self.data.pop().unwrap();
 
-        return (upper << 8) + lower;
+        return ((upper as u16) << 8) + lower as u16;
+    }
+}
+
+struct Cpu {
+    /// Memory: 64 kB
+    mem: [u8; 0x10000],
+    /// Program Counter
+    pc: u16,
+    /// Working Stack
+    wst: Stack,
+    /// Return Stack
+    rst: Stack,
+}
+
+impl Cpu {
+    fn new() -> Self {
+        Self {
+            mem: [0; 0x10000],
+            pc: 0x0100,
+            wst: Stack::new(),
+            rst: Stack::new(),
+        }
+    }
+
+    fn load_rom(&mut self, rom: &[u8]) {
+        let start = 0x0100;
+        let end = 0x0100 + rom.len;
+
+        self.mem[start..end].copy_from_slice(rom);
+        self.pc = 0x0100;
     }
 }
