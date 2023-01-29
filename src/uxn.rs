@@ -1,28 +1,46 @@
 struct Stack {
     data: Vec<u8>,
+    keep_mode: bool,
+    pop_offset: usize,
 }
 
 impl Stack {
     fn new() -> Self {
-        Self { data: Vec::new() }
+        Self {
+            data: Vec::new(),
+            keep_mode: false,
+            pop_offset: 0,
+        }
+    }
+
+    fn set_keep_mode(&mut self, mode: bool) {
+        self.pop_offset = 0;
+        self.keep_mode = mode;
     }
 
     fn push_byte(&mut self, byte: u8) {
-        self.data.push(byte)
+        self.data.push(byte);
+        self.pop_offset += 1;
     }
 
     fn pop_byte(&mut self) -> u8 {
-        self.data.pop().unwrap()
+        if self.keep_mode {
+            let value = self.data[self.data.len() - self.pop_offset - 1];
+            self.pop_offset += 1;
+            value
+        } else {
+            self.data.pop().unwrap()
+        }
     }
 
     fn push_short(&mut self, short: u16) {
-        let bytes = short.to_be_bytes();
-        self.data.extend_from_slice(&bytes);
+        self.push_byte((short >> 8) as u8);
+        self.push_byte(short as u8);
     }
 
     fn pop_short(&mut self) -> u16 {
-        let lower = self.data.pop().unwrap();
-        let upper = self.data.pop().unwrap();
+        let lower = self.pop_byte();
+        let upper = self.pop_byte();
 
         return ((upper as u16) << 8) + lower as u16;
     }
@@ -118,6 +136,17 @@ fn test_stack() {
     s.push_byte(0x56);
     s.push_byte(0x78);
     assert_eq!(s.pop_short(), 0x5678);
+
+    // Test keep mode
+    s.push_byte(0x12);
+    s.push_byte(0x34);
+    s.set_keep_mode(true);
+    s.push_byte(0x56);
+    assert_eq!(s.pop_byte(), 0x34);
+    assert_eq!(s.pop_byte(), 0x12);
+    s.set_keep_mode(false);
+    assert_eq!(s.pop_byte(), 0x56);
+    assert_eq!(s.pop_short(), 0x1234);
 }
 
 #[test]
