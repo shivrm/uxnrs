@@ -109,6 +109,45 @@ impl Cpu {
         self.mem[start..end].copy_from_slice(rom);
         self.pc = 0x0100;
     }
+
+    fn eval_vector(&mut self) {
+        loop {
+            instr = self.mem[self.pc];
+
+            let (wst, rst) = (self.wst, self.rst);
+            // Working and return stacks are swapped in return mode
+            if instr & 0x40 {
+                swap(wst, rst);
+            }
+
+            // Activate keep mode
+            if instr & 0x80 {
+                wst.set_keep_mode(true);
+            }
+
+            let short_mode = instr & 0x20;
+
+            fn pop(stack: &mut Stack) -> u16 {
+                if short_mode {
+                    stack.pop_short()
+                } else {
+                    stack.pop_byte() as u16
+                }
+            }
+
+            fn push(stack: &mut Stack, value: u16) {
+                if short_mode {
+                    stack.push_short(value);
+                } else {
+                    stack.push_byte(value as u8);
+                }
+            }
+
+            match instr {
+                _ => todo!(),
+            }
+        }
+    }
 }
 
 #[test]
