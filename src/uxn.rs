@@ -303,7 +303,55 @@ impl Cpu {
                 DEO => {
                     todo!();
                 }
-                _ => todo!(),
+                ADD => {
+                    let b = pop!(wst);
+                    let a = pop!(wst);
+                    push!(wst, a + b);
+                }
+                SUB => {
+                    let b = pop!(wst);
+                    let a = pop!(wst);
+                    push!(wst, a - b);
+                }
+                MUL => {
+                    let b = pop!(wst);
+                    let a = pop!(wst);
+                    push!(wst, a * b);
+                }
+                DIV => {
+                    let b = pop!(wst);
+                    let a = pop!(wst);
+                    push!(wst, a / b);
+                }
+                AND => {
+                    let b = pop!(wst);
+                    let a = pop!(wst);
+                    push!(wst, a & b);
+                }
+                ORA => {
+                    let b = pop!(wst);
+                    let a = pop!(wst);
+                    push!(wst, a | b);
+                }
+                EOR => {
+                    let b = pop!(wst);
+                    let a = pop!(wst);
+                    push!(wst, a ^ b);
+                }
+                SFT => {
+                    let a = pop!(wst);
+                    let shift = wst.pop_byte();
+
+                    let right = shift & 0xf;
+                    let left = shift >> 4;
+
+                    let result = if short_mode {
+                        (a >> right) << left
+                    } else {
+                        ((a as u8 >> right) << left) as u16
+                    };
+                    push!(wst, result)
+                }
             }
         }
     }
