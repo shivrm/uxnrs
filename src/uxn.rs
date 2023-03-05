@@ -148,6 +148,41 @@ impl Cpu {
                 };
             }
 
+            macro_rules! jump {
+                ($addr:expr) => {
+                    if short_mode {
+                        self.pc = $addr
+                    } else {
+                        self.pc += $addr
+                    }
+                };
+            }
+
+            macro_rules! peek {
+                ($addr:expr) => {
+                    if short_mode {
+                        let high = self.mem[$addr as usize];
+                        let low = self.mem[$addr as usize + 1];
+                        u16::from_be_bytes([high, low])
+                    } else {
+                        self.mem[$addr as usize] as u16
+                    }
+                };
+            }
+
+            macro_rules! poke {
+                ($addr:expr, $value:expr) => {
+                    if short_mode {
+                        let high = ($value >> 8) as u8;
+                        let low = $value as u8;
+                        self.mem[$addr as usize] = high;
+                        self.mem[$addr as usize + 1] = low;
+                    } else {
+                        self.mem[$addr as usize] = $value as u8;
+                    }
+                };
+            }
+
             use Instruction::*;
             match unsafe { std::mem::transmute(instr) } {
                 BRK => return,
@@ -208,6 +243,65 @@ impl Cpu {
                     let b = pop!(wst);
                     let a = pop!(wst);
                     push!(wst, (a < b) as u16)
+                }
+                JMP => {
+                    let addr = pop!(wst);
+                    jump!(addr)
+                }
+                JCN => {
+                    let addr = pop!(wst);
+                    let cond = wst.pop_byte();
+
+                    if cond != 0 {
+                        jump!(addr)
+                    }
+                }
+                JSR => {
+                    let addr = pop!(wst);
+                    rst.push_short(self.pc);
+                    jump!(addr)
+                }
+                STH => {
+                    let a = pop!(wst);
+                    push!(rst, a);
+                }
+                LDZ => {
+                    let addr = wst.pop_byte();
+                    let value = peek!(addr);
+                    push!(wst, value);
+                }
+                STZ => {
+                    let addr = wst.pop_byte();
+                    let value = pop!(wst);
+                    poke!(addr, value);
+                }
+                LDR => {
+                    let offset: i8 = unsafe { std::mem::transmute(wst.pop_byte()) };
+                    let addr = self.pc.wrapping_add_signed(offset as i16);
+                    let value = peek!(addr);
+                    push!(wst, value);
+                }
+                STR => {
+                    let offset: i8 = unsafe { std::mem::transmute(wst.pop_byte()) };
+                    let addr = self.pc.wrapping_add_signed(offset as i16);
+                    let value = pop!(wst);
+                    poke!(addr, value);
+                }
+                LDA => {
+                    let addr = wst.pop_short();
+                    let value = peek!(addr);
+                    push!(wst, value);
+                }
+                STA => {
+                    let addr = wst.pop_short();
+                    let value = pop!(wst);
+                    poke!(addr, value)
+                }
+                DEI => {
+                    todo!();
+                }
+                DEO => {
+                    todo!();
                 }
                 _ => todo!(),
             }
