@@ -185,7 +185,40 @@ impl Cpu {
 
             use Instruction::*;
             match unsafe { std::mem::transmute(instr) } {
-                BRK => return,
+                BRK => match instr >> 5 {
+                    1 => return,
+                    2 => {
+                        let cond = pop!(wst);
+                        if cond != 0 {
+                            self.pc += u16::from_be_bytes([
+                                self.mem[self.pc as usize],
+                                self.mem[self.pc as usize + 1],
+                            ]);
+                        }
+                        self.pc += 2
+                    }
+                    3 => {
+                        let addr = u16::from_be_bytes([
+                            self.mem[self.pc as usize],
+                            self.mem[self.pc as usize + 1],
+                        ]);
+                        self.pc += addr + 2;
+                    }
+                    4 => {
+                        rst.push_short(self.pc + 2);
+                        let addr = u16::from_be_bytes([
+                            self.mem[self.pc as usize],
+                            self.mem[self.pc as usize + 1],
+                        ]);
+                        self.pc += addr + 2;
+                    }
+                    5 | 6 | 7 | 8 => {
+                        let value = peek!(self.pc);
+                        self.pc += if short_mode { 1 } else { 2 };
+                        push!(wst, value);
+                    }
+                    _ => unreachable!(),
+                },
                 INC => {
                     let a = pop!(wst);
                     push!(wst, a + 1);
