@@ -114,6 +114,10 @@ impl Cpu {
     fn eval_vector(&mut self) {
         loop {
             let instr = self.mem[self.pc as usize];
+            self.pc += 1;
+
+            println!("{:#06x}, {instr:#04x}", self.pc);
+            println!("{:?}", self.wst.data);
 
             let (wst, rst) = (&mut self.wst, &mut self.rst);
             // Working and return stacks are swapped in return mode
@@ -184,10 +188,10 @@ impl Cpu {
             }
 
             use Instruction::*;
-            match unsafe { std::mem::transmute(instr) } {
+            match unsafe { std::mem::transmute(instr & 0b00011111) } {
                 BRK => match instr >> 5 {
-                    1 => return,
-                    2 => {
+                    0 => return,
+                    1 => {
                         let cond = pop!(wst);
                         if cond != 0 {
                             self.pc += u16::from_be_bytes([
@@ -197,14 +201,14 @@ impl Cpu {
                         }
                         self.pc += 2
                     }
-                    3 => {
+                    2 => {
                         let addr = u16::from_be_bytes([
                             self.mem[self.pc as usize],
                             self.mem[self.pc as usize + 1],
                         ]);
                         self.pc += addr + 2;
                     }
-                    4 => {
+                    3 => {
                         rst.push_short(self.pc + 2);
                         let addr = u16::from_be_bytes([
                             self.mem[self.pc as usize],
@@ -212,9 +216,10 @@ impl Cpu {
                         ]);
                         self.pc += addr + 2;
                     }
-                    5 | 6 | 7 | 8 => {
+                    4 | 5 | 6 | 7 => {
+                        println!("LIT");
                         let value = peek!(self.pc);
-                        self.pc += if short_mode { 1 } else { 2 };
+                        self.pc += if short_mode { 2 } else { 1 };
                         push!(wst, value);
                     }
                     _ => unreachable!(),
@@ -441,4 +446,30 @@ fn test_load_rom() {
     for byte in cpu.mem[0x0104..].iter() {
         assert_eq!(*byte, 0_u8);
     }
+}
+
+pub fn test_cpu_opcodes() {
+    let mut cpu = Cpu::new();
+
+    macro_rules! stack_assert {
+        ($program:expr, $stack:expr) => {
+            cpu.load_rom($program);
+            cpu.eval_vector();
+            let stack = &cpu.wst.data;
+            assert_eq!(stack.as_slice(), $stack);
+        };
+    }
+
+    // LIT 12 ( 12 )
+    stack_assert!(&[0x80, 0x12], [0x12]);
+    // LIT2 1234 ADD ( 46 )
+    stack_assert!(&[0xa0, 0x12, 0x34, 0x18], [0x46]);
+    // LIT 10 DUP ( 10 10 )
+    stack_assert!(&[0x80, 0x10, 0x06], [0x10, 0x10]);
+    // LIT2 1234 SWP ( 34 12 )
+    stack_assert!(&[0xa0, 0x12, 0x34, 0x04], [0x34, 0x12]);
+    // LIT2 1234 ADDk ( 12 34 46 )
+    stack_assert!(&[0xa0, 0x12, 0x34, 0x98], [0x12, 0x34, 0x46]);
+    // LIT 02 JMP LIT 12 LIT 34 ( 34 )
+    stack_assert!(&[0x80, 0x02, 0x0c, 0x80, 0x12, 0x80, 0x34], [0x34]);
 }
