@@ -49,7 +49,7 @@ pub struct Uxn<'a> {
     wst: Stack,
     /// Return Stack
     rst: Stack,
-    devices: [Option<&'a dyn Device>; 16],
+    devices: [Option<&'a mut dyn Device>; 16],
 }
 
 impl<'a> Uxn<'a> {
@@ -59,11 +59,15 @@ impl<'a> Uxn<'a> {
             pc: 0x0100,
             wst: Stack::new(),
             rst: Stack::new(),
-            devices: [None; 16],
+            // [None; 16] produces an error as &mut dyn Device does not implement Copy
+            devices: [
+                None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None,
+            ],
         }
     }
 
-    fn mount_device(&mut self, device: &'a dyn Device, port: u8) {
+    fn mount_device(&mut self, device: &'a mut dyn Device, port: u8) {
         match self.devices[port as usize] {
             Some(_) => panic!("Another device already mounted on port"),
             None => self.devices[port as usize] = Some(device),
@@ -304,11 +308,20 @@ impl<'a> Uxn<'a> {
                     let value = pop!(wst);
                     poke!(addr, value)
                 }
-                DEI => {
-                    todo!();
-                }
+                DEI => todo!(),
                 DEO => {
-                    todo!();
+                    let addr = wst.pop_byte();
+                    let value = pop!(wst);
+
+                    let (device, port) = (addr >> 4, addr & 0xf);
+
+                    if let Some(ref mut device) = self.devices[device as usize] {
+                        if short_mode {
+                            device.set_short(port, value)
+                        } else {
+                            device.set_byte(port, value as u8)
+                        }
+                    }
                 }
                 ADD => {
                     let b = pop!(wst);
@@ -442,4 +455,15 @@ pub fn test_cpu_opcodes() {
     stack_assert!(&[0xa0, 0x12, 0x34, 0x98], [0x12, 0x34, 0x46]);
     // LIT 02 JMP LIT 12 LIT 34 ( 34 )
     stack_assert!(&[0x80, 0x02, 0x0c, 0x80, 0x12, 0x80, 0x34], [0x34]);
+}
+
+#[test]
+pub fn test_console() {
+    let mut uxn = Uxn::new();
+    let mut console = devices::Console::new();
+
+    uxn.mount_device(&mut console, 1);
+    // #6818 DEO #0a18 DEO
+    uxn.load_rom(&[0xa0, 0x68, 0x18, 0x17, 0xa0, 0x0a, 0x18, 0x17]);
+    uxn.eval_vector(0x0100);
 }
