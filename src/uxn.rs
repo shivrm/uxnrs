@@ -1,50 +1,8 @@
-struct Stack {
-    data: Vec<u8>,
-    keep_mode: bool,
-    pop_offset: usize,
-}
+mod devices;
+mod stack;
 
-impl Stack {
-    fn new() -> Self {
-        Self {
-            data: Vec::new(),
-            keep_mode: false,
-            pop_offset: 0,
-        }
-    }
-
-    fn set_keep_mode(&mut self, mode: bool) {
-        self.pop_offset = 0;
-        self.keep_mode = mode;
-    }
-
-    fn push_byte(&mut self, byte: u8) {
-        self.data.push(byte);
-        self.pop_offset += 1;
-    }
-
-    fn pop_byte(&mut self) -> u8 {
-        if self.keep_mode {
-            let value = self.data[self.data.len() - self.pop_offset - 1];
-            self.pop_offset += 1;
-            value
-        } else {
-            self.data.pop().unwrap()
-        }
-    }
-
-    fn push_short(&mut self, short: u16) {
-        self.push_byte((short >> 8) as u8);
-        self.push_byte(short as u8);
-    }
-
-    fn pop_short(&mut self) -> u16 {
-        let lower = self.pop_byte();
-        let upper = self.pop_byte();
-
-        return ((upper as u16) << 8) + lower as u16;
-    }
-}
+pub use devices::Device;
+pub use stack::Stack;
 
 #[repr(u8)]
 enum Instruction {
@@ -82,24 +40,33 @@ enum Instruction {
     SFT = 0x1f,
 }
 
-struct Cpu {
+pub struct Uxn<'a> {
     /// Memory: 64 kB
-    mem: [u8; 0x10000],
+    pub mem: [u8; 0x10000],
     /// Program Counter
     pc: u16,
     /// Working Stack
     wst: Stack,
     /// Return Stack
     rst: Stack,
+    devices: [Option<&'a dyn Device>; 16],
 }
 
-impl Cpu {
+impl<'a> Uxn<'a> {
     fn new() -> Self {
         Self {
             mem: [0; 0x10000],
             pc: 0x0100,
             wst: Stack::new(),
             rst: Stack::new(),
+            devices: [None; 16],
+        }
+    }
+
+    fn mount_device(&mut self, device: &'a dyn Device, port: u8) {
+        match self.devices[port as usize] {
+            Some(_) => panic!("Another device already mounted on port"),
+            None => self.devices[port as usize] = Some(device),
         }
     }
 
@@ -111,13 +78,16 @@ impl Cpu {
         self.pc = 0x0100;
     }
 
-    fn eval_vector(&mut self) {
+    fn eval_vector(&mut self, addr: u16) {
+        self.pc = addr;
+
         loop {
             let instr = self.mem[self.pc as usize];
-            self.pc += 1;
 
             println!("{:#06x}, {instr:#04x}", self.pc);
             println!("{:?}", self.wst.data);
+
+            self.pc += 1;
 
             let (wst, rst) = (&mut self.wst, &mut self.rst);
             // Working and return stacks are swapped in return mode
@@ -217,7 +187,6 @@ impl Cpu {
                         self.pc += addr + 2;
                     }
                     4 | 5 | 6 | 7 => {
-                        println!("LIT");
                         let value = peek!(self.pc);
                         self.pc += if short_mode { 2 } else { 1 };
                         push!(wst, value);
@@ -391,6 +360,7 @@ impl Cpu {
                     push!(wst, result)
                 }
             }
+            wst.set_keep_mode(false);
         }
     }
 }
@@ -435,27 +405,27 @@ fn test_stack() {
 
 #[test]
 fn test_load_rom() {
-    let mut cpu = Cpu::new();
+    let mut uxn = Uxn::new();
     let rom: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
 
     // Verify that first four bytes are the ROM bytes
-    cpu.load_rom(&rom);
-    assert_eq!(cpu.mem[0x0100..0x0104], [0x12, 0x34, 0x56, 0x78]);
+    uxn.load_rom(&rom);
+    assert_eq!(uxn.mem[0x0100..0x0104], [0x12, 0x34, 0x56, 0x78]);
 
     // Verify that the rest of the memory is zeroed
-    for byte in cpu.mem[0x0104..].iter() {
+    for byte in uxn.mem[0x0104..].iter() {
         assert_eq!(*byte, 0_u8);
     }
 }
 
+#[test]
 pub fn test_cpu_opcodes() {
-    let mut cpu = Cpu::new();
-
     macro_rules! stack_assert {
         ($program:expr, $stack:expr) => {
-            cpu.load_rom($program);
-            cpu.eval_vector();
-            let stack = &cpu.wst.data;
+            let mut uxn = Uxn::new();
+            uxn.load_rom($program);
+            uxn.eval_vector(0x0100);
+            let stack = &uxn.wst.data;
             assert_eq!(stack.as_slice(), $stack);
         };
     }
